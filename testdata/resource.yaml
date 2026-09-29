@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: broken-pod
+  labels:
+    app:test      # Missing space after colon
+    environment   # Missing value and colon
+spec:
+  containers:
+  - name: web-app
+    image: nginx:latest
+     ports:       # Bad indentation (extra spaces)
+    - containerPort: 80
+    env:
+    - name: MY_VAR
+      value: "unclosed string  # Missing closing quote

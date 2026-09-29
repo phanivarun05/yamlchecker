@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"yamlchecker-cli/internal/config"
 	"yamlchecker-cli/internal/scanner"
 
 	"github.com/spf13/cobra"
@@ -12,18 +13,23 @@ import (
 var dirPath string
 
 func runCheck(cmd *cobra.Command, args []string) error {
-	fmt.Printf("Scanning Directory: %s", dirPath)
+	cmd.SilenceUsage = true
+	fmt.Printf("Scanning Directory: %s\n", dirPath)
 	files, err := scanner.FindYAMLFiles(dirPath)
 	if err != nil {
-		fmt.Printf("\nError Finding YAML files in %s directory", dirPath)
-		return err
+		return fmt.Errorf("scanning %s: %w", dirPath, err)
 	}
 	if len(files) == 0 {
 		fmt.Printf("\nNo YAML files founded in directory %s", dirPath)
 	}
 	fmt.Printf("\nBelow are the YAML files from directory %s\n", dirPath)
 	for _, file := range files {
-		fmt.Println(file)
+		result, err := config.Load(file)
+		if err != nil {
+			fmt.Println("ERROR:", err)
+			continue
+		}
+		fmt.Printf("%s -> %#v\n", file, result)
 	}
 	return nil
 }
