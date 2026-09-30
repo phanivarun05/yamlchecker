@@ -6,11 +6,14 @@ import (
 
 	"yamlchecker-cli/internal/config"
 	"yamlchecker-cli/internal/scanner"
+	"yamlchecker-cli/internal/validator"
 
 	"github.com/spf13/cobra"
 )
 
 var dirPath string
+
+var required = []string{"runtime", "instance_class", "host"}
 
 func runCheck(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
@@ -22,12 +25,17 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	if len(files) == 0 {
 		fmt.Printf("\nNo YAML files founded in directory %s", dirPath)
 	}
-	fmt.Printf("\nBelow are the YAML files from directory %s\n", dirPath)
+	fmt.Printf("\nBelow are the YAML files mapped from directory %s\n", dirPath)
 	for _, file := range files {
 		result, err := config.Load(file)
 		if err != nil {
 			fmt.Println("ERROR:", err)
 			continue
+		}
+		missing := validator.CheckRequired(result, required)
+		if len(missing) > 0 {
+			fmt.Printf("These are missing fields from YAML script: %s ---->", file)
+			fmt.Println(missing)
 		}
 		fmt.Printf("%s -> %#v\n", file, result)
 	}
