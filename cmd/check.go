@@ -13,7 +13,9 @@ import (
 
 var dirPath string
 
-var required = []string{"runtime", "instance_class", "host"}
+var requiredFields []string
+
+var anyErrors bool
 
 func runCheck(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
@@ -30,14 +32,23 @@ func runCheck(cmd *cobra.Command, args []string) error {
 		result, err := config.Load(file)
 		if err != nil {
 			fmt.Println("ERROR:", err)
+			anyErrors = true
 			continue
 		}
-		missing := validator.CheckRequired(result, required)
+		missing := validator.CheckRequired(result, requiredFields)
 		if len(missing) > 0 {
 			fmt.Printf("These are missing fields from YAML script: %s ---->", file)
 			fmt.Println(missing)
+		} else {
+			if len(result) > 0 {
+				fmt.Printf("YAML Script parsed without errors:%s -> %v\n", file, result)
+			} else {
+				fmt.Printf("YAML Script is empty:%s -> %v\n", file, result)
+			}
 		}
-		fmt.Printf("%s -> %#v\n", file, result)
+	}
+	if anyErrors {
+		return fmt.Errorf("errors found in YAML scripts")
 	}
 	return nil
 }
@@ -50,7 +61,7 @@ var checkCmd = &cobra.Command{
 
 func init() {
 	checkCmd.Flags().StringVarP(&dirPath, "dir", "d", "", "Provide the Directory Path")
-
+	checkCmd.Flags().StringSliceVarP(&requiredFields, "required", "r", []string{}, "Provide the required fields comma separated")
 	if err := checkCmd.MarkFlagRequired("dir"); err != nil {
 		fmt.Println("Error setting up required field", err)
 		os.Exit(1)
