@@ -1,6 +1,6 @@
 package main
 
-import (
+/*import (
 	"fmt"
 	"time"
 	"yamlchecker-cli/checker"
@@ -24,3 +24,4 @@ func main() {
 		fmt.Printf("Name: %s, URL: %s, Success: %t, Status: %d, Duration: %s, Err: %v\n", result.Name, result.URL, result.Success, result.Status, result.Duration, result.Err)
 	}
 }
+*/

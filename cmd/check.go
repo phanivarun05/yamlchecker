@@ -18,6 +18,10 @@ var requiredFields []string
 
 var anyErrors bool
 
+var configErrors bool
+
+var unhealthyTargets bool
+
 func runCheck(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
 	fmt.Printf("Scanning Directory: %s\n", dirPath)
@@ -55,6 +59,7 @@ func runCheck(cmd *cobra.Command, args []string) error {
 }
 
 func runMonitor(cmd *cobra.Command, args []string) error {
+	cmd.SilenceUsage = true
 	files, err := scanner.FindYAMLFiles(dirPath)
 	if err != nil {
 		return fmt.Errorf("scanning %s: %w", dirPath, err)
@@ -64,7 +69,7 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 		result, err := config.Load(file)
 		if err != nil {
 			fmt.Println("ERROR:", err)
-			anyErrors = true
+			configErrors = true
 			continue
 		}
 		if result["type"] != "http" {
@@ -97,10 +102,14 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 			result.Err,
 		)
 		if !result.Success {
-			anyErrors = true
+			unhealthyTargets = true
 		}
 	}
-	if anyErrors {
+	if configErrors && unhealthyTargets {
+		return fmt.Errorf("config errors found, and one or more endpoints are unhealthy")
+	} else if configErrors {
+		return fmt.Errorf("one or more config files could not be parsed")
+	} else if unhealthyTargets {
 		return fmt.Errorf("one or more endpoints failed health check")
 	}
 	return nil
