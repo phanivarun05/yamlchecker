@@ -2,9 +2,8 @@ package checker
 
 import (
 	"context"
-	"fmt"
-	"log"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -25,17 +24,25 @@ func CheckHTTP(name, url string) Result {
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		log.Fatalf("Error creating request: %v", err)
+		duration := time.Since(start)
+		return Result{
+			Name:     name,
+			URL:      url,
+			Success:  false,
+			Duration: duration,
+			Err:      err,
+		}
 	}
 
 	resp, err := http.DefaultClient.Do(req)
+	duration := time.Since(start)
 	if err != nil {
-		log.Fatalf("Error sending request: %v", err)
 		return Result{
-			Name:    name,
-			URL:     url,
-			Success: false,
-			Err:     err,
+			Name:     name,
+			URL:      url,
+			Success:  false,
+			Duration: duration,
+			Err:      err,
 		}
 	}
 
@@ -57,7 +64,38 @@ func CheckHTTP(name, url string) Result {
 			Success:  false,
 			Status:   resp.StatusCode,
 			Duration: computing_duration,
-			Err:      fmt.Errorf("status code: %d", resp.StatusCode),
+			Err:      nil,
 		}
 	}
+}
+
+type Target struct {
+	Name string
+	URL  string
+}
+
+func RunAll(targets []Target) []Result {
+
+	results := make(chan Result, len(targets))
+
+	var wg sync.WaitGroup
+
+	for _, t := range targets {
+		wg.Add(1)
+		go func(t Target) {
+			defer wg.Done()
+			results <- CheckHTTP(t.Name, t.URL)
+		}(t)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	allResults := make([]Result, 0, len(targets))
+	for result := range results {
+		allResults = append(allResults, result)
+	}
+	return allResults
 }

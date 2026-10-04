@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"yamlchecker-cli/checker"
 	"yamlchecker-cli/internal/config"
 	"yamlchecker-cli/internal/scanner"
 	"yamlchecker-cli/internal/validator"
@@ -53,19 +54,79 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+func runMonitor(cmd *cobra.Command, args []string) error {
+	files, err := scanner.FindYAMLFiles(dirPath)
+	if err != nil {
+		return fmt.Errorf("scanning %s: %w", dirPath, err)
+	}
+	var targets []checker.Target
+	for _, file := range files {
+		result, err := config.Load(file)
+		if err != nil {
+			fmt.Println("ERROR:", err)
+			anyErrors = true
+			continue
+		}
+		if result["type"] != "http" {
+			continue // not an HTTP target, skip silently
+		}
+
+		name, ok := result["name"].(string)
+		if !ok {
+			fmt.Printf("skipping %s: missing or invalid 'name' field\n", file)
+			continue
+		}
+
+		url, ok := result["url"].(string)
+		if !ok {
+			fmt.Printf("skipping %s: missing or invalid 'url' field\n", file)
+			continue
+		}
+
+		targets = append(targets, checker.Target{Name: name, URL: url})
+	}
+	fmt.Printf("Monitoring %d HTTP endpoints\n", len(targets))
+	results := checker.RunAll(targets)
+	for _, result := range results {
+		fmt.Printf("Name: %s, URL: %s, Success: %t, Status: %d, Duration: %s, Err: %v\n",
+			result.Name,
+			result.URL,
+			result.Success,
+			result.Status,
+			result.Duration,
+			result.Err,
+		)
+		if !result.Success {
+			anyErrors = true
+		}
+	}
+	if anyErrors {
+		return fmt.Errorf("one or more endpoints failed health check")
+	}
+	return nil
+}
+
 var checkCmd = &cobra.Command{
 	Use:   "check",
 	Short: "Checks the provided Directory path",
 	RunE:  runCheck,
 }
 
+var monitorCmd = &cobra.Command{
+	Use:   "monitor",
+	Short: "Monitors the provided HTTP endpoints",
+	RunE:  runMonitor,
+}
+
 func init() {
 	checkCmd.Flags().StringVarP(&dirPath, "dir", "d", "", "Provide the Directory Path")
 	checkCmd.Flags().StringSliceVarP(&requiredFields, "required", "r", []string{}, "Provide the required fields comma separated")
+	monitorCmd.Flags().StringVarP(&dirPath, "dir", "d", "", "Provide the Directory to Report HTTP EndPoints")
 	if err := checkCmd.MarkFlagRequired("dir"); err != nil {
 		fmt.Println("Error setting up required field", err)
 		os.Exit(1)
 	}
 
 	rootCmd.AddCommand(checkCmd)
+	rootCmd.AddCommand(monitorCmd)
 }
