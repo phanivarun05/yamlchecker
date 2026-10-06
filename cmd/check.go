@@ -6,7 +6,6 @@ import (
 
 	"yamlchecker-cli/checker"
 	"yamlchecker-cli/internal/config"
-	"yamlchecker-cli/internal/scanner"
 	"yamlchecker-cli/internal/validator"
 
 	"github.com/spf13/cobra"
@@ -16,43 +15,37 @@ var dirPath string
 
 var requiredFields []string
 
-var anyErrors bool
-
 var configErrors bool
 
 var unhealthyTargets bool
 
 func runCheck(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
-	fmt.Printf("Scanning Directory: %s\n", dirPath)
-	files, err := scanner.FindYAMLFiles(dirPath)
+	fmt.Printf("Loading from Directory: %s\n", dirPath)
+	loaded, err := config.LoadAll(dirPath)
 	if err != nil {
-		return fmt.Errorf("scanning %s: %w", dirPath, err)
+		return fmt.Errorf("Error Loading configs from %s: %w", dirPath, err)
 	}
-	if len(files) == 0 {
-		fmt.Printf("\nNo YAML files founded in directory %s", dirPath)
-	}
-	fmt.Printf("\nBelow are the YAML files mapped from directory %s\n", dirPath)
-	for _, file := range files {
-		result, err := config.Load(file)
+	for _, lf := range loaded {
+		result, err := lf.Data, lf.Err
 		if err != nil {
 			fmt.Println("ERROR:", err)
-			anyErrors = true
+			configErrors = true
 			continue
 		}
 		missing := validator.CheckRequired(result, requiredFields)
 		if len(missing) > 0 {
-			fmt.Printf("These are missing fields from YAML script: %s ---->", file)
+			fmt.Printf("These are missing fields from YAML script: %s ---->", lf.Path)
 			fmt.Println(missing)
 		} else {
 			if len(result) > 0 {
-				fmt.Printf("YAML Script parsed without errors:%s -> %v\n", file, result)
+				fmt.Printf("YAML Script parsed without errors:%s -> %v\n", lf.Path, result)
 			} else {
-				fmt.Printf("YAML Script is empty:%s -> %v\n", file, result)
+				fmt.Printf("YAML Script is empty:%s -> %v\n", lf.Path, result)
 			}
 		}
 	}
-	if anyErrors {
+	if configErrors {
 		return fmt.Errorf("errors found in YAML scripts")
 	}
 	return nil
@@ -60,13 +53,13 @@ func runCheck(cmd *cobra.Command, args []string) error {
 
 func runMonitor(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
-	files, err := scanner.FindYAMLFiles(dirPath)
+	loaded, err := config.LoadAll(dirPath)
 	if err != nil {
-		return fmt.Errorf("scanning %s: %w", dirPath, err)
+		return fmt.Errorf("Error Loading from Directory %s: %w", dirPath, err)
 	}
 	var targets []checker.Target
-	for _, file := range files {
-		result, err := config.Load(file)
+	for _, lf := range loaded {
+		result, err := lf.Data, lf.Err
 		if err != nil {
 			fmt.Println("ERROR:", err)
 			configErrors = true
@@ -78,13 +71,13 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 
 		name, ok := result["name"].(string)
 		if !ok {
-			fmt.Printf("skipping %s: missing or invalid 'name' field\n", file)
+			fmt.Printf("skipping %s: missing or invalid 'name' field\n", lf.Path)
 			continue
 		}
 
 		url, ok := result["url"].(string)
 		if !ok {
-			fmt.Printf("skipping %s: missing or invalid 'url' field\n", file)
+			fmt.Printf("skipping %s: missing or invalid 'url' field\n", lf.Path)
 			continue
 		}
 
