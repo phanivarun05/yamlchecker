@@ -15,12 +15,9 @@ var dirPath string
 
 var requiredFields []string
 
-var configErrors bool
-
-var unhealthyTargets bool
-
 func runCheck(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
+	configErrors := false
 	fmt.Printf("Loading from Directory: %s\n", dirPath)
 	loaded, err := config.LoadAll(dirPath)
 	if err != nil {
@@ -53,6 +50,8 @@ func runCheck(cmd *cobra.Command, args []string) error {
 
 func runMonitor(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
+	configErrors := false
+	unhealthyTargets := false
 	loaded, err := config.LoadAll(dirPath)
 	if err != nil {
 		return fmt.Errorf("Error Loading from Directory %s: %w", dirPath, err)
