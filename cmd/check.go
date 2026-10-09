@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -14,6 +15,23 @@ import (
 var dirPath string
 
 var requiredFields []string
+
+// # helper
+func targetFromEntry(entry map[string]interface{}) (checker.Target, error) {
+	Type, ok := entry["type"].(string)
+	if !ok || Type != "http" {
+		return checker.Target{}, errors.New("No http type found")
+	}
+	name, ok := entry["name"].(string)
+	if !ok {
+		return checker.Target{}, errors.New("No name field found")
+	}
+	url, ok := entry["url"].(string)
+	if !ok {
+		return checker.Target{}, errors.New("No url found")
+	}
+	return checker.Target{Name: name, URL: url}, nil
+}
 
 func runCheck(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
@@ -63,6 +81,24 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 			fmt.Println("ERROR:", err)
 			configErrors = true
 			continue
+		}
+		endpoints, ok := lf.Data["endpoints"].([]interface{})
+		if !ok {
+			fmt.Println("no endpoints found")
+			continue
+		}
+		for _, item := range endpoints {
+			entry, ok := item.(map[string]interface{})
+			if !ok {
+				fmt.Printf("Invalid entry from file: %s", lf.Path)
+				continue
+			}
+			target, err := targetFromEntry(entry)
+			if err != nil {
+				fmt.Printf("Skipping entry in %s: %v", lf.Path, err)
+				continue
+			}
+			targets = append(targets, target)
 		}
 		if result["type"] != "http" {
 			continue // not an HTTP target, skip silently

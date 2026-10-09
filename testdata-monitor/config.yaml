@@ -1,0 +1,56 @@
+endpoints:
+  # Working / healthy endpoints
+  - type: http
+    name: httpbin-get
+    url: "https://httpbin.org/get"
+
+  - type: http
+    name: example-root
+    url: "https://example.com/"
+
+  - type: http
+    name: google-health
+    url: "https://www.google.com/"
+
+  # Endpoints that return 404
+  - type: http
+    name: httpbin-404
+    url: "https://httpbin.org/status/404"
+
+  - type: http
+    name: nonexistent-page-example
+    url: "https://example.com/this-page-does-not-exist-12345"
+
+  # Endpoints that return 500
+  - type: http
+    name: httpbin-500
+    url: "https://httpbin.org/status/500"
+
+  - type: http
+    name: fake-internal-error
+    url: "https://httpbin.org/status/503"  # often used to simulate server errors
+
+  # Malformed / invalid URLs
+  - type: http
+    name: malformed-no-scheme
+    url: "not-a-valid-url-at-all"
+
+  - type: http
+    name: malformed-bad-scheme
+    url: "htp://typo-in-scheme.com/"
+
+  - type: http
+    name: malformed-missing-host
+    url: "http:///no-host-part"
+
+  - type: http
+    name: malformed-spaces
+    url: "http://example .com / path"
+
+  - type: http
+    name: malformed-trailing-colon
+    url: "http://example.com:"
+
+  - type: http
+    name: malformed-just-scheme
+    url: "http://"
