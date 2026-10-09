@@ -16,10 +16,10 @@ type Result struct {
 	Err      error
 }
 
-func CheckHTTP(name, url string) Result {
+func CheckHTTP(ctx context.Context, name, url string) Result {
 	start := time.Now()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -74,7 +74,7 @@ type Target struct {
 	URL  string
 }
 
-func RunAll(targets []Target, workers int) []Result {
+func RunAll(ctx context.Context, targets []Target, workers int) []Result {
 
 	jobs := make(chan Target, len(targets))
 	results := make(chan Result, len(targets))
@@ -86,7 +86,7 @@ func RunAll(targets []Target, workers int) []Result {
 		go func() {
 			defer wg.Done()
 			for t := range jobs {
-				results <- CheckHTTP(t.Name, t.URL)
+				results <- CheckHTTP(ctx, t.Name, t.URL)
 			}
 		}()
 	}

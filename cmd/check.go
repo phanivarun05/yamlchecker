@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
+	"time"
 
 	"yamlchecker-cli/checker"
 	"yamlchecker-cli/internal/config"
@@ -17,6 +20,8 @@ var dirPath string
 var requiredFields []string
 
 var workers int
+
+var interval time.Duration
 
 // # helper
 func targetFromEntry(entry map[string]interface{}) (checker.Target, error) {
@@ -33,6 +38,29 @@ func targetFromEntry(entry map[string]interface{}) (checker.Target, error) {
 		return checker.Target{}, errors.New("No url found")
 	}
 	return checker.Target{Name: name, URL: url}, nil
+}
+
+func runRound(ctx context.Context, targets []checker.Target, workers int) bool {
+	fmt.Printf("---- check at %v ----\n", time.Now().Format(time.RFC3339))
+	results := checker.RunAll(ctx, targets, workers)
+	if ctx.Err() != nil {
+		return false
+	}
+	unhealthyTargets := false
+	for _, result := range results {
+		fmt.Printf("Name: %s, URL: %s, Success: %t, Status: %d, Duration: %s, Err: %v\n",
+			result.Name,
+			result.URL,
+			result.Success,
+			result.Status,
+			result.Duration,
+			result.Err,
+		)
+		if !result.Success {
+			unhealthyTargets = true
+		}
+	}
+	return unhealthyTargets
 }
 
 func runCheck(cmd *cobra.Command, args []string) error {
@@ -69,12 +97,16 @@ func runCheck(cmd *cobra.Command, args []string) error {
 }
 
 func runMonitor(cmd *cobra.Command, args []string) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
 	cmd.SilenceUsage = true
-	var results []checker.Result
 	configErrors := false
-	unhealthyTargets := false
+	unhealthy := false
 	if workers < 1 {
 		return fmt.Errorf("workers must be at least 1, got %d", workers)
+	}
+	if interval < 0 {
+		return fmt.Errorf("negative interval is not accepted, got %v", interval)
 	}
 	loaded, err := config.LoadAll(dirPath)
 	if err != nil {
@@ -118,29 +150,38 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 			targets = append(targets, target)
 		}
 	}
+	if len(targets) == 0 {
+		return fmt.Errorf("nothing to monitor, found %d targets", len(targets))
+	}
 	fmt.Printf("Monitoring %d HTTP endpoints\n", len(targets))
-	results = checker.RunAll(targets, workers)
-	for _, result := range results {
-		fmt.Printf("Name: %s, URL: %s, Success: %t, Status: %d, Duration: %s, Err: %v\n",
-			result.Name,
-			result.URL,
-			result.Success,
-			result.Status,
-			result.Duration,
-			result.Err,
-		)
-		if !result.Success {
-			unhealthyTargets = true
+	unhealthy = runRound(ctx, targets, workers)
+	if ctx.Err() != nil {
+		return nil
+	}
+
+	if interval == 0 {
+		if configErrors && unhealthy {
+			return fmt.Errorf("config errors found, and one or more endpoints are unhealthy")
+		} else if configErrors {
+			return fmt.Errorf("one or more config files could not be parsed")
+		} else if unhealthy {
+			return fmt.Errorf("one or more endpoints failed health check")
+		}
+		return nil
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			print("stopping\n")
+			return nil
+		case <-ticker.C:
+			runRound(ctx, targets, workers)
 		}
 	}
-	if configErrors && unhealthyTargets {
-		return fmt.Errorf("config errors found, and one or more endpoints are unhealthy")
-	} else if configErrors {
-		return fmt.Errorf("one or more config files could not be parsed")
-	} else if unhealthyTargets {
-		return fmt.Errorf("one or more endpoints failed health check")
-	}
-	return nil
 }
 
 var checkCmd = &cobra.Command{
@@ -159,7 +200,8 @@ func init() {
 	checkCmd.Flags().StringVarP(&dirPath, "dir", "d", "", "Provide the Directory Path")
 	checkCmd.Flags().StringSliceVarP(&requiredFields, "required", "r", []string{}, "Provide the required fields comma separated")
 	monitorCmd.Flags().StringVarP(&dirPath, "dir", "d", "", "Provide the Directory to Report HTTP EndPoints")
-	monitorCmd.Flags().IntVarP(&workers, "workers", "w", 10, "No workers to result targets")
+	monitorCmd.Flags().IntVarP(&workers, "workers", "w", 10, "Number of workers to result targets")
+	monitorCmd.Flags().DurationVarP(&interval, "interval", "i", 0*time.Minute, "Time interval to ping taregsts")
 	if err := checkCmd.MarkFlagRequired("dir"); err != nil {
 		fmt.Println("Error setting up required field", err)
 		os.Exit(1)
