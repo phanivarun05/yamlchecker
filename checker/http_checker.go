@@ -74,19 +74,27 @@ type Target struct {
 	URL  string
 }
 
-func RunAll(targets []Target) []Result {
+func RunAll(targets []Target, workers int) []Result {
 
+	jobs := make(chan Target, len(targets))
 	results := make(chan Result, len(targets))
 
 	var wg sync.WaitGroup
 
-	for _, t := range targets {
+	for range workers {
 		wg.Add(1)
-		go func(t Target) {
+		go func() {
 			defer wg.Done()
-			results <- CheckHTTP(t.Name, t.URL)
-		}(t)
+			for t := range jobs {
+				results <- CheckHTTP(t.Name, t.URL)
+			}
+		}()
 	}
+
+	for _, target := range targets {
+		jobs <- target
+	}
+	close(jobs)
 
 	go func() {
 		wg.Wait()

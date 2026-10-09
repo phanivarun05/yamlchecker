@@ -16,6 +16,8 @@ var dirPath string
 
 var requiredFields []string
 
+var workers int
+
 // # helper
 func targetFromEntry(entry map[string]interface{}) (checker.Target, error) {
 	Type, ok := entry["type"].(string)
@@ -68,58 +70,56 @@ func runCheck(cmd *cobra.Command, args []string) error {
 
 func runMonitor(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
+	var results []checker.Result
 	configErrors := false
 	unhealthyTargets := false
+	if workers < 1 {
+		return fmt.Errorf("workers must be at least 1, got %d", workers)
+	}
 	loaded, err := config.LoadAll(dirPath)
 	if err != nil {
 		return fmt.Errorf("Error Loading from Directory %s: %w", dirPath, err)
 	}
 	var targets []checker.Target
 	for _, lf := range loaded {
-		result, err := lf.Data, lf.Err
+		err := lf.Err
 		if err != nil {
 			fmt.Println("ERROR:", err)
 			configErrors = true
 			continue
 		}
 		endpoints, ok := lf.Data["endpoints"].([]interface{})
-		if !ok {
-			fmt.Println("no endpoints found")
-			continue
-		}
-		for _, item := range endpoints {
-			entry, ok := item.(map[string]interface{})
-			if !ok {
-				fmt.Printf("Invalid entry from file: %s", lf.Path)
+		if ok {
+			for i, item := range endpoints {
+				entry, ok := item.(map[string]interface{})
+				if !ok {
+					fmt.Printf("invalid entry from %d file: %s\n", i, lf.Path)
+					configErrors = true
+					continue
+				}
+				target, err := targetFromEntry(entry)
+				if err != nil {
+					fmt.Printf("\nSkipping entry in %d file %s: %v", i, lf.Path, err)
+					configErrors = true
+					continue
+				}
+				targets = append(targets, target)
+			}
+		} else {
+			if lf.Data["type"] != "http" {
 				continue
 			}
-			target, err := targetFromEntry(entry)
+			target, err := targetFromEntry(lf.Data)
 			if err != nil {
-				fmt.Printf("Skipping entry in %s: %v", lf.Path, err)
+				fmt.Printf("\nSkipping entry of %s: %v", lf.Path, err)
+				configErrors = true
 				continue
 			}
 			targets = append(targets, target)
 		}
-		if result["type"] != "http" {
-			continue // not an HTTP target, skip silently
-		}
-
-		name, ok := result["name"].(string)
-		if !ok {
-			fmt.Printf("skipping %s: missing or invalid 'name' field\n", lf.Path)
-			continue
-		}
-
-		url, ok := result["url"].(string)
-		if !ok {
-			fmt.Printf("skipping %s: missing or invalid 'url' field\n", lf.Path)
-			continue
-		}
-
-		targets = append(targets, checker.Target{Name: name, URL: url})
 	}
 	fmt.Printf("Monitoring %d HTTP endpoints\n", len(targets))
-	results := checker.RunAll(targets)
+	results = checker.RunAll(targets, workers)
 	for _, result := range results {
 		fmt.Printf("Name: %s, URL: %s, Success: %t, Status: %d, Duration: %s, Err: %v\n",
 			result.Name,
@@ -159,6 +159,7 @@ func init() {
 	checkCmd.Flags().StringVarP(&dirPath, "dir", "d", "", "Provide the Directory Path")
 	checkCmd.Flags().StringSliceVarP(&requiredFields, "required", "r", []string{}, "Provide the required fields comma separated")
 	monitorCmd.Flags().StringVarP(&dirPath, "dir", "d", "", "Provide the Directory to Report HTTP EndPoints")
+	monitorCmd.Flags().IntVarP(&workers, "workers", "w", 10, "No workers to result targets")
 	if err := checkCmd.MarkFlagRequired("dir"); err != nil {
 		fmt.Println("Error setting up required field", err)
 		os.Exit(1)
