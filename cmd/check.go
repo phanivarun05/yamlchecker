@@ -179,7 +179,12 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 			print("stopping\n")
 			return nil
 		case <-ticker.C:
+			start := time.Now()
 			runRound(ctx, targets, workers)
+			elapsed := time.Since(start)
+			if elapsed > interval {
+				fmt.Printf("warning: round took %v, longer than --interval %v\n", elapsed, interval)
+			}
 		}
 	}
 }
