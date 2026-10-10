@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"time"
@@ -153,7 +154,7 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 	if len(targets) == 0 {
 		return fmt.Errorf("nothing to monitor, found %d targets", len(targets))
 	}
-	fmt.Printf("Monitoring %d HTTP endpoints\n", len(targets))
+	slog.Info("monitor started", "targets", len(targets))
 	unhealthy = runRound(ctx, targets, workers)
 	if ctx.Err() != nil {
 		return nil
