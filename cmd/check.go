@@ -41,13 +41,14 @@ func targetFromEntry(entry map[string]interface{}) (checker.Target, error) {
 	return checker.Target{Name: name, URL: url}, nil
 }
 
-func runRound(ctx context.Context, targets []checker.Target, workers int) bool {
+func runRound(ctx context.Context, targets []checker.Target, workers int) (bool, int) {
 	slog.Info("---- round started ----")
 	results := checker.RunAll(ctx, targets, workers)
 	if ctx.Err() != nil {
-		return false
+		return false, 0
 	}
 	unhealthyTargets := false
+	var unhealthyCount int = 0
 	for _, result := range results {
 		if result.Err != nil {
 			slog.Error("endpoint unreachable", result.Name, result.URL, "duration", result.Duration, "err", result.Err)
@@ -58,9 +59,10 @@ func runRound(ctx context.Context, targets []checker.Target, workers int) bool {
 		}
 		if !result.Success {
 			unhealthyTargets = true
+			unhealthyCount++
 		}
 	}
-	return unhealthyTargets
+	return unhealthyTargets, unhealthyCount
 }
 
 func runCheck(cmd *cobra.Command, args []string) error {
@@ -156,12 +158,17 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("nothing to monitor, found %d targets", len(targets))
 	}
 	slog.Info("monitor started", "targets", len(targets))
-	unhealthy = runRound(ctx, targets, workers)
+	start := time.Now()
+	unhealthy, unhealthyTargets := runRound(ctx, targets, workers)
 	if ctx.Err() != nil {
 		return nil
 	}
 
 	if interval == 0 {
+		elapsed := time.Since(start)
+		slog.Info("---- round finished ----")
+		slog.Info("elapsed time", "time_elapsed", elapsed)
+		slog.Info("event summary", "healthy targets", len(targets)-unhealthyTargets, "unhealthy targets", unhealthyTargets)
 		if configErrors && unhealthy {
 			return fmt.Errorf("config errors found, and one or more endpoints are unhealthy")
 		} else if configErrors {
@@ -182,9 +189,11 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 			return nil
 		case <-ticker.C:
 			start := time.Now()
-			runRound(ctx, targets, workers)
-			slog.Info("---- round finished ----")
+			_, unhealthyTargets := runRound(ctx, targets, workers)
 			elapsed := time.Since(start)
+			slog.Info("---- round finished ----")
+			slog.Info("elapsed time", "time_elapsed", elapsed)
+			slog.Info("event summary", "healthy targets", len(targets)-unhealthyTargets, "unhealthy targets", unhealthyTargets)
 			if elapsed > interval {
 				slog.Warn("warning: round took %v, longer than --interval %v\n", "time_elapsed", elapsed, "interval", interval)
 			}
