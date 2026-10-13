@@ -49,7 +49,7 @@ endpoints:
 
   - type: http
     name: malformed-trailing-colon
-    url: "http://example.com:"
+    url: "http://example.com:::::"
 
   - type: http
     name: malformed-just-scheme

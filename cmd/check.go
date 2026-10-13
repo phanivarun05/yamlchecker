@@ -42,7 +42,7 @@ func targetFromEntry(entry map[string]interface{}) (checker.Target, error) {
 }
 
 func runRound(ctx context.Context, targets []checker.Target, workers int) (bool, int) {
-	slog.Info("---- round started ----")
+	slog.Info("round started")
 	results := checker.RunAll(ctx, targets, workers)
 	if ctx.Err() != nil {
 		return false, 0
@@ -51,11 +51,11 @@ func runRound(ctx context.Context, targets []checker.Target, workers int) (bool,
 	var unhealthyCount int = 0
 	for _, result := range results {
 		if result.Err != nil {
-			slog.Error("endpoint unreachable", result.Name, result.URL, "duration", result.Duration, "err", result.Err)
+			slog.Error("endpoint unreachable", "name", result.Name, "url", result.URL, "duration", result.Duration.Milliseconds(), "err", result.Err)
 		} else if !result.Success {
-			slog.Warn("endpoint unhealthy", result.Name, result.URL, "status", result.Status, "duration", result.Duration)
+			slog.Warn("endpoint unhealthy", "name", result.Name, "url", result.URL, "status", result.Status, "duration", result.Duration.Milliseconds())
 		} else {
-			slog.Info("endpoint healthy", result.Name, result.URL, "status", result.Status, "duration", result.Duration)
+			slog.Info("endpoint healthy", "name", result.Name, "url", result.URL, "status", result.Status, "duration", result.Duration.Milliseconds())
 		}
 		if !result.Success {
 			unhealthyTargets = true
@@ -166,9 +166,9 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 
 	if interval == 0 {
 		elapsed := time.Since(start)
-		slog.Info("---- round finished ----")
+		slog.Info("round finished")
 		slog.Info("elapsed time", "time_elapsed", elapsed)
-		slog.Info("event summary", "healthy targets", len(targets)-unhealthyTargets, "unhealthy targets", unhealthyTargets)
+		slog.Info("event summary", "healthy", len(targets)-unhealthyTargets, "unhealthy", unhealthyTargets)
 		if configErrors && unhealthy {
 			return fmt.Errorf("config errors found, and one or more endpoints are unhealthy")
 		} else if configErrors {
@@ -191,9 +191,9 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 			start := time.Now()
 			_, unhealthyTargets := runRound(ctx, targets, workers)
 			elapsed := time.Since(start)
-			slog.Info("---- round finished ----")
+			slog.Info("round finished")
 			slog.Info("elapsed time", "time_elapsed", elapsed)
-			slog.Info("event summary", "healthy targets", len(targets)-unhealthyTargets, "unhealthy targets", unhealthyTargets)
+			slog.Info("event summary", "healthy", len(targets)-unhealthyTargets, "unhealthy", unhealthyTargets)
 			if elapsed > interval {
 				slog.Warn("warning: round took %v, longer than --interval %v\n", "time_elapsed", elapsed, "interval", interval)
 			}
