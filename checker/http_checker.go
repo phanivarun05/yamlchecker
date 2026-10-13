@@ -19,7 +19,7 @@ type Result struct {
 func CheckHTTP(ctx context.Context, name, url string) Result {
 	start := time.Now()
 
-	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)

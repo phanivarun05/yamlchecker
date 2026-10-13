@@ -42,21 +42,20 @@ func targetFromEntry(entry map[string]interface{}) (checker.Target, error) {
 }
 
 func runRound(ctx context.Context, targets []checker.Target, workers int) bool {
-	fmt.Printf("---- check at %v ----\n", time.Now().Format(time.RFC3339))
+	slog.Info("---- round started ----")
 	results := checker.RunAll(ctx, targets, workers)
 	if ctx.Err() != nil {
 		return false
 	}
 	unhealthyTargets := false
 	for _, result := range results {
-		fmt.Printf("Name: %s, URL: %s, Success: %t, Status: %d, Duration: %s, Err: %v\n",
-			result.Name,
-			result.URL,
-			result.Success,
-			result.Status,
-			result.Duration,
-			result.Err,
-		)
+		if result.Err != nil {
+			slog.Error("endpoint unreachable", result.Name, result.URL, "duration", result.Duration, "err", result.Err)
+		} else if !result.Success {
+			slog.Warn("endpoint unhealthy", result.Name, result.URL, "status", result.Status, "duration", result.Duration)
+		} else {
+			slog.Info("endpoint healthy", result.Name, result.URL, "status", result.Status, "duration", result.Duration)
+		}
 		if !result.Success {
 			unhealthyTargets = true
 		}
@@ -70,7 +69,8 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Loading from Directory: %s\n", dirPath)
 	loaded, err := config.LoadAll(dirPath)
 	if err != nil {
-		return fmt.Errorf("Error Loading configs from %s: %w", dirPath, err)
+		slog.Error("Error Loading from Directory %s:", "path", dirPath)
+		return err
 	}
 	for _, lf := range loaded {
 		result, err := lf.Data, lf.Err
@@ -111,7 +111,8 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 	}
 	loaded, err := config.LoadAll(dirPath)
 	if err != nil {
-		return fmt.Errorf("Error Loading from Directory %s: %w", dirPath, err)
+		slog.Error("Error Loading from Directory %s:", "path", dirPath)
+		return err
 	}
 	var targets []checker.Target
 	for _, lf := range loaded {
@@ -126,13 +127,13 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 			for i, item := range endpoints {
 				entry, ok := item.(map[string]interface{})
 				if !ok {
-					fmt.Printf("invalid entry from %d file: %s\n", i, lf.Path)
+					slog.Warn("invalid entry from %d file: %s\n", "item", i, "path", lf.Path)
 					configErrors = true
 					continue
 				}
 				target, err := targetFromEntry(entry)
 				if err != nil {
-					fmt.Printf("\nSkipping entry in %d file %s: %v", i, lf.Path, err)
+					slog.Warn("\nSkipping entry in %d file %s: %v", "item", i, "path", lf.Path, "err", err)
 					configErrors = true
 					continue
 				}
@@ -177,14 +178,15 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 	for {
 		select {
 		case <-ctx.Done():
-			print("stopping\n")
+			slog.Info("shutting down...\n")
 			return nil
 		case <-ticker.C:
 			start := time.Now()
 			runRound(ctx, targets, workers)
+			slog.Info("---- round finished ----")
 			elapsed := time.Since(start)
 			if elapsed > interval {
-				fmt.Printf("warning: round took %v, longer than --interval %v\n", elapsed, interval)
+				slog.Warn("warning: round took %v, longer than --interval %v\n", "time_elapsed", elapsed, "interval", interval)
 			}
 		}
 	}
