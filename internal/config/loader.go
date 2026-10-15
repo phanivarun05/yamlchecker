@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 
 	"gopkg.in/yaml.v3"
@@ -16,7 +17,8 @@ func Load(path string) (map[string]interface{}, error) {
 	var result map[string]interface{}
 
 	if err := yaml.Unmarshal(bytes, &result); err != nil {
-		return nil, fmt.Errorf("unmarshalling %s: %w", path, err)
+		slog.Error("unmarshalling failed", "path", path)
+		return nil, err
 	}
 	return result, nil
 }

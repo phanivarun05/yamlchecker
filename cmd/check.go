@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/signal"
 	"time"
@@ -28,17 +29,27 @@ var interval time.Duration
 func targetFromEntry(entry map[string]interface{}) (checker.Target, error) {
 	Type, ok := entry["type"].(string)
 	if !ok || Type != "http" {
-		return checker.Target{}, errors.New("No http type found")
+		return checker.Target{}, errors.New("no http type found")
 	}
 	name, ok := entry["name"].(string)
 	if !ok {
-		return checker.Target{}, errors.New("No name field found")
+		return checker.Target{}, errors.New("no name field found")
 	}
-	url, ok := entry["url"].(string)
+	rawUrl, ok := entry["url"].(string)
 	if !ok {
-		return checker.Target{}, errors.New("No url found")
+		return checker.Target{}, errors.New("no url found")
 	}
-	return checker.Target{Name: name, URL: url}, nil
+	u, err := url.ParseRequestURI(rawUrl)
+	if err != nil {
+		return checker.Target{}, errors.New("failed to parse the request url")
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return checker.Target{}, errors.New("not a http or https type")
+	}
+	if u.Host == "" {
+		return checker.Target{}, errors.New("no host in request url")
+	}
+	return checker.Target{Name: name, URL: rawUrl}, nil
 }
 
 func runRound(ctx context.Context, targets []checker.Target, workers int) (bool, int) {
@@ -83,13 +94,13 @@ func runCheck(cmd *cobra.Command, args []string) error {
 		}
 		missing := validator.CheckRequired(result, requiredFields)
 		if len(missing) > 0 {
-			fmt.Printf("These are missing fields from YAML script: %s ---->", lf.Path)
+			slog.Warn("These are missing fields from YAML script: %s ---->", "path", lf.Path)
 			fmt.Println(missing)
 		} else {
 			if len(result) > 0 {
-				fmt.Printf("YAML Script parsed without errors:%s -> %v\n", lf.Path, result)
+				slog.Info("YAML Script parsed without errors:%s -> %v\n", "path", lf.Path, "result", result)
 			} else {
-				fmt.Printf("YAML Script is empty:%s -> %v\n", lf.Path, result)
+				slog.Warn("YAML Script is empty:%s -> %v\n", "path", lf.Path, "result", result)
 			}
 		}
 	}
@@ -124,18 +135,19 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 			configErrors = true
 			continue
 		}
+		slog.Debug("loaded config file", "path", lf.Path)
 		endpoints, ok := lf.Data["endpoints"].([]interface{})
 		if ok {
 			for i, item := range endpoints {
 				entry, ok := item.(map[string]interface{})
 				if !ok {
-					slog.Warn("invalid entry from %d file: %s\n", "item", i, "path", lf.Path)
+					slog.Warn("invalid entry", "item", i, "path", lf.Path)
 					configErrors = true
 					continue
 				}
 				target, err := targetFromEntry(entry)
 				if err != nil {
-					slog.Warn("\nSkipping entry in %d file %s: %v", "item", i, "path", lf.Path, "err", err)
+					slog.Warn("skipping entry", "item", i, "path", lf.Path, "err", err)
 					configErrors = true
 					continue
 				}
@@ -147,7 +159,7 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 			}
 			target, err := targetFromEntry(lf.Data)
 			if err != nil {
-				fmt.Printf("\nSkipping entry of %s: %v", lf.Path, err)
+				slog.Warn("skipping entry", "path", lf.Path, "err", err)
 				configErrors = true
 				continue
 			}
