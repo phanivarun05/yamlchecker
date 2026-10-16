@@ -41,10 +41,10 @@ func targetFromEntry(entry map[string]interface{}) (checker.Target, error) {
 	}
 	u, err := url.ParseRequestURI(rawUrl)
 	if err != nil {
-		return checker.Target{}, errors.New("failed to parse the request url")
+		return checker.Target{}, fmt.Errorf("failed to parse the request url: %s", rawUrl)
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return checker.Target{}, errors.New("not a http or https type")
+		return checker.Target{}, fmt.Errorf("not a http or https type, found: %s", u.Scheme)
 	}
 	if u.Host == "" {
 		return checker.Target{}, errors.New("no host in request url")
@@ -52,28 +52,28 @@ func targetFromEntry(entry map[string]interface{}) (checker.Target, error) {
 	return checker.Target{Name: name, URL: rawUrl}, nil
 }
 
-func runRound(ctx context.Context, targets []checker.Target, workers int) (bool, int) {
+func runRound(ctx context.Context, targets []checker.Target, workers int) bool {
+	healthy, unhealthy, unreachable := 0, 0, 0
 	slog.Info("round started")
+	start := time.Now()
 	results := checker.RunAll(ctx, targets, workers)
 	if ctx.Err() != nil {
-		return false, 0
+		return false
 	}
-	unhealthyTargets := false
-	var unhealthyCount int = 0
 	for _, result := range results {
 		if result.Err != nil {
-			slog.Error("endpoint unreachable", "name", result.Name, "url", result.URL, "duration", result.Duration.Milliseconds(), "err", result.Err)
+			slog.Error("endpoint unreachable", "name", result.Name, "url", result.URL, "duration_ms", result.Duration.Milliseconds(), "err", result.Err)
+			unreachable++
 		} else if !result.Success {
-			slog.Warn("endpoint unhealthy", "name", result.Name, "url", result.URL, "status", result.Status, "duration", result.Duration.Milliseconds())
+			slog.Warn("endpoint unhealthy", "name", result.Name, "url", result.URL, "status", result.Status, "duration_ms", result.Duration.Milliseconds())
+			unhealthy++
 		} else {
-			slog.Info("endpoint healthy", "name", result.Name, "url", result.URL, "status", result.Status, "duration", result.Duration.Milliseconds())
-		}
-		if !result.Success {
-			unhealthyTargets = true
-			unhealthyCount++
+			slog.Info("endpoint healthy", "name", result.Name, "url", result.URL, "status", result.Status, "duration_ms", result.Duration.Milliseconds())
+			healthy++
 		}
 	}
-	return unhealthyTargets, unhealthyCount
+	slog.Info("round finished", "healthy", healthy, "unhealthy", unhealthy, "unreachable", unreachable, "duration_ms", time.Since(start).Milliseconds())
+	return unhealthy+unreachable > 0
 }
 
 func runCheck(cmd *cobra.Command, args []string) error {
@@ -170,17 +170,12 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("nothing to monitor, found %d targets", len(targets))
 	}
 	slog.Info("monitor started", "targets", len(targets))
-	start := time.Now()
-	unhealthy, unhealthyTargets := runRound(ctx, targets, workers)
+	unhealthy = runRound(ctx, targets, workers)
 	if ctx.Err() != nil {
 		return nil
 	}
 
 	if interval == 0 {
-		elapsed := time.Since(start)
-		slog.Info("round finished")
-		slog.Info("elapsed time", "time_elapsed", elapsed)
-		slog.Info("event summary", "healthy", len(targets)-unhealthyTargets, "unhealthy", unhealthyTargets)
 		if configErrors && unhealthy {
 			return fmt.Errorf("config errors found, and one or more endpoints are unhealthy")
 		} else if configErrors {
@@ -201,11 +196,8 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 			return nil
 		case <-ticker.C:
 			start := time.Now()
-			_, unhealthyTargets := runRound(ctx, targets, workers)
+			runRound(ctx, targets, workers)
 			elapsed := time.Since(start)
-			slog.Info("round finished")
-			slog.Info("elapsed time", "time_elapsed", elapsed)
-			slog.Info("event summary", "healthy", len(targets)-unhealthyTargets, "unhealthy", unhealthyTargets)
 			if elapsed > interval {
 				slog.Warn("warning: round took %v, longer than --interval %v\n", "time_elapsed", elapsed, "interval", interval)
 			}

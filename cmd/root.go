@@ -12,6 +12,7 @@ var logLevel string
 var logFormat string
 
 var rootCmd = &cobra.Command{
+	SilenceErrors:     true,
 	Use:               "yamlchecker",
 	Short:             "Validates YAML configs against required fields",
 	PersistentPreRunE: setupLogging,
