@@ -180,6 +180,7 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 	if len(targets) == 0 {
 		return fmt.Errorf("nothing to monitor, found %d targets", len(targets))
 	}
+	metrics.Init(targets)
 	if addr != "" {
 		done, err := metrics.Serve(ctx, addr)
 		if err != nil {
@@ -213,7 +214,7 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 	for {
 		select {
 		case <-ctx.Done():
-			slog.Info("shutting down...\n")
+			slog.Info("exiting the monitor")
 			return nil
 		case <-ticker.C:
 			start := time.Now()

@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"time"
+	"yamlchecker-cli/checker"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -32,6 +33,15 @@ var (
 		Buckets: []float64{0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0},
 	}, []string{"name"})
 )
+
+func Init(targets []checker.Target) {
+	outcomes := []string{checker.OutcomeHealthy, checker.OutcomeUnhealthy, checker.OutcomeUnreachable}
+	for _, target := range targets {
+		for _, outcome := range outcomes {
+			checksTotal.WithLabelValues(target.Name, outcome)
+		}
+	}
+}
 
 func Record(name, result string, d time.Duration) {
 	var statusVal float64 = 0
@@ -64,7 +74,7 @@ func Serve(ctx context.Context, addr string) (<-chan struct{}, error) {
 	go func() {
 		defer close(done)
 		<-ctx.Done()
-		slog.Info("Shutting down")
+		slog.Info("Shutting down the metrics server")
 
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
