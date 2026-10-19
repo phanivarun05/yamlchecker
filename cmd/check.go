@@ -69,13 +69,13 @@ func runRound(ctx context.Context, targets []checker.Target, workers int) bool {
 		metrics.Record(result.Name, outcome, result.Duration)
 
 		switch outcome {
-		case checker.OutcomeHealthy:
-			slog.Error("endpoint unreachable", "name", result.Name, "url", result.URL, "duration_ms", result.Duration.Milliseconds(), "err", result.Err)
+		case checker.OutcomeUnreachable:
+			slog.Error("endpoint unreachable", "name", result.Name, "url", result.URL, "status", result.Status, "duration_ms", result.Duration.Milliseconds(), "err", result.Err)
 			unreachable++
 		case checker.OutcomeUnhealthy:
 			slog.Warn("endpoint unhealthy", "name", result.Name, "url", result.URL, "status", result.Status, "duration_ms", result.Duration.Milliseconds())
 			unhealthy++
-		case checker.OutcomeUnreachable:
+		case checker.OutcomeHealthy:
 			slog.Info("endpoint healthy", "name", result.Name, "url", result.URL, "status", result.Status, "duration_ms", result.Duration.Milliseconds())
 			healthy++
 		}
