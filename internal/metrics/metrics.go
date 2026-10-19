@@ -22,13 +22,13 @@ var (
 )
 var (
 	checksTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "yamlchecker_total_checks",
+		Name: "yamlchecker_checks_total",
 		Help: "The total number of checks done",
 	}, []string{"name", "result"})
 )
 var (
 	checkDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "yamlchecker_checks_duration_seconds",
+		Name:    "yamlchecker_check_duration_seconds",
 		Help:    "Duration describing how long checks took",
 		Buckets: []float64{0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0},
 	}, []string{"name"})
