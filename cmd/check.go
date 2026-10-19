@@ -244,7 +244,7 @@ func init() {
 	monitorCmd.Flags().StringVarP(&dirPath, "dir", "d", "", "Provide the Directory to Report HTTP EndPoints")
 	monitorCmd.Flags().IntVarP(&workers, "workers", "w", 10, "Number of workers to result targets")
 	monitorCmd.Flags().DurationVarP(&interval, "interval", "i", 0*time.Minute, "Time interval to ping taregsts")
-	monitorCmd.Flags().StringVarP(&addr, "metrics-addr", "mAddr", "", "Address for metrics server")
+	monitorCmd.Flags().StringVar(&addr, "metrics-addr", "", "Address for metrics server")
 	if err := checkCmd.MarkFlagRequired("dir"); err != nil {
 		fmt.Println("Error setting up required field", err)
 		os.Exit(1)
