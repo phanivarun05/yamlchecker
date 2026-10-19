@@ -16,6 +16,22 @@ type Result struct {
 	Err      error
 }
 
+const (
+	OutcomeHealthy     = "healthy"
+	OutcomeUnhealthy   = "unhealthy"
+	OutcomeUnreachable = "unreachable"
+)
+
+func Classify(result Result) string {
+	if result.Err != nil {
+		return OutcomeUnreachable
+	} else if result.Success {
+		return OutcomeHealthy
+	} else {
+		return OutcomeUnhealthy
+	}
+}
+
 func CheckHTTP(ctx context.Context, name, url string) Result {
 	start := time.Now()
 

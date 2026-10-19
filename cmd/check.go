@@ -12,6 +12,7 @@ import (
 
 	"yamlchecker-cli/checker"
 	"yamlchecker-cli/internal/config"
+	"yamlchecker-cli/internal/metrics"
 	"yamlchecker-cli/internal/validator"
 
 	"github.com/spf13/cobra"
@@ -24,6 +25,8 @@ var requiredFields []string
 var workers int
 
 var interval time.Duration
+
+var addr string
 
 // # helper
 func targetFromEntry(entry map[string]interface{}) (checker.Target, error) {
@@ -61,13 +64,18 @@ func runRound(ctx context.Context, targets []checker.Target, workers int) bool {
 		return false
 	}
 	for _, result := range results {
-		if result.Err != nil {
+		outcome := checker.Classify(result)
+
+		metrics.Record(result.Name, outcome, result.Duration)
+
+		switch outcome {
+		case checker.OutcomeHealthy:
 			slog.Error("endpoint unreachable", "name", result.Name, "url", result.URL, "duration_ms", result.Duration.Milliseconds(), "err", result.Err)
 			unreachable++
-		} else if !result.Success {
+		case checker.OutcomeUnhealthy:
 			slog.Warn("endpoint unhealthy", "name", result.Name, "url", result.URL, "status", result.Status, "duration_ms", result.Duration.Milliseconds())
 			unhealthy++
-		} else {
+		case checker.OutcomeUnreachable:
 			slog.Info("endpoint healthy", "name", result.Name, "url", result.URL, "status", result.Status, "duration_ms", result.Duration.Milliseconds())
 			healthy++
 		}
@@ -122,6 +130,9 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 	if interval < 0 {
 		return fmt.Errorf("negative interval is not accepted, got %v", interval)
 	}
+	if addr != "" && interval <= 0 {
+		return fmt.Errorf("metrics server requires interval to monitor, got interval: %v", interval)
+	}
 	loaded, err := config.LoadAll(dirPath)
 	if err != nil {
 		slog.Error("Error Loading from Directory %s:", "path", dirPath)
@@ -168,6 +179,16 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 	}
 	if len(targets) == 0 {
 		return fmt.Errorf("nothing to monitor, found %d targets", len(targets))
+	}
+	if addr != "" {
+		done, err := metrics.Serve(ctx, addr)
+		if err != nil {
+			return fmt.Errorf("failed to serve the metrics at %s: %w", addr, err)
+		}
+		defer func() {
+			stop()
+			<-done
+		}()
 	}
 	slog.Info("monitor started", "targets", len(targets))
 	unhealthy = runRound(ctx, targets, workers)
@@ -223,6 +244,7 @@ func init() {
 	monitorCmd.Flags().StringVarP(&dirPath, "dir", "d", "", "Provide the Directory to Report HTTP EndPoints")
 	monitorCmd.Flags().IntVarP(&workers, "workers", "w", 10, "Number of workers to result targets")
 	monitorCmd.Flags().DurationVarP(&interval, "interval", "i", 0*time.Minute, "Time interval to ping taregsts")
+	monitorCmd.Flags().StringVarP(&addr, "metrics-addr", "mAddr", "", "Address for metrics server")
 	if err := checkCmd.MarkFlagRequired("dir"); err != nil {
 		fmt.Println("Error setting up required field", err)
 		os.Exit(1)
