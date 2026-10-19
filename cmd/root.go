@@ -16,6 +16,7 @@ var rootCmd = &cobra.Command{
 	Use:               "yamlchecker",
 	Short:             "Validates YAML configs against required fields",
 	PersistentPreRunE: setupLogging,
+	Version:           version,
 }
 
 func init() {
