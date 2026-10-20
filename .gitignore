@@ -1,1 +1,3 @@
 yamlchecker.exe
+dist/
+build.ps1
