@@ -10,10 +10,10 @@ import (
 	"os/signal"
 	"time"
 
-	"yamlchecker-cli/checker"
-	"yamlchecker-cli/internal/config"
-	"yamlchecker-cli/internal/metrics"
-	"yamlchecker-cli/internal/validator"
+	"github.com/phanivarun05/yamlchecker/checker"
+	"github.com/phanivarun05/yamlchecker/internal/config"
+	"github.com/phanivarun05/yamlchecker/internal/metrics"
+	"github.com/phanivarun05/yamlchecker/internal/validator"
 
 	"github.com/spf13/cobra"
 )

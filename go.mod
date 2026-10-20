@@ -1,4 +1,4 @@
-module yamlchecker-cli
+module github.com/phanivarun05/yamlchecker
 
 go 1.27.1
 

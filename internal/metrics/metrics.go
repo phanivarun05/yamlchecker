@@ -7,7 +7,8 @@ import (
 	"net"
 	"net/http"
 	"time"
-	"yamlchecker-cli/checker"
+
+	"github.com/phanivarun05/yamlchecker/checker"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"

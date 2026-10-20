@@ -3,7 +3,8 @@ package main
 import (
 	"log/slog"
 	"os"
-	"yamlchecker-cli/cmd"
+
+	"github.com/phanivarun05/yamlchecker/cmd"
 )
 
 func main() {

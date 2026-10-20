@@ -2,7 +2,8 @@ package config
 
 import (
 	"fmt"
-	"yamlchecker-cli/internal/scanner"
+
+	"github.com/phanivarun05/yamlchecker/internal/scanner"
 )
 
 type LoadedFile struct {
