@@ -27,7 +27,7 @@ jobs:
       # Using a verified release version tag for govulncheck
       - name: Install and Run govulncheck
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
 
   image:
