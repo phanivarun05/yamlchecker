@@ -1,0 +1,121 @@
+name: docker
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Installs the exact Go version defined in your go.mod file
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      # Using a verified release version tag for govulncheck
+      - name: Install and Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          govulncheck ./...
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker Image
+        run: |
+          docker build --build-arg VERSION=ci -t yamlchecker:ci .
+
+      # --- SMOKE TESTS ---
+      - name: Smoke Test - Check Version Flag
+        run: |
+          VERSION_OUTPUT=$(docker run --rm yamlchecker:ci --version)
+          echo "Output: $VERSION_OUTPUT"
+          if [ "$VERSION_OUTPUT" != "yamlchecker version ci" ]; then
+            echo "Error: Version output did not match exact expected pattern."
+            exit 1
+          fi
+
+      - name: Smoke Test - Validate Known-Good Folder
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/testdata-ci:/config:ro" \
+            yamlchecker:ci check --dir /config -r name
+
+      - name: Smoke Test - Detached Metrics & SIGTERM Verification
+        run: |
+          # 1. Start container detached with monitor subcommand, 2112 mappings, and read-only testdata mount
+          docker run -d --name yamlchecker-monitor \
+            -p 2112:2112 \
+            -v "${{ github.workspace }}/testdata-ci:/config:ro" \
+            yamlchecker:ci monitor --dir /config --interval 5s --metrics-addr 0.0.0.0:2112
+          
+          # 2. Retry loop up to 10 times to wait for the metrics server to bind
+          echo "Waiting for metrics endpoint to become available..."
+          SUCCESS=0
+          for i in {1..10}; do
+            if curl -fsS http://127.0.0.1:2112/metrics | grep -q "yamlchecker_"; then
+              echo "Metrics verified successfully!"
+              SUCCESS=1
+              break
+            fi
+            echo "Endpoint not ready yet, retrying in 1s ($i/10)..."
+            sleep 1
+          done
+
+          if [ $SUCCESS -ne 1 ]; then
+            echo "Error: Metrics endpoint failed to respond or metrics missing matching keys."
+            exit 1
+          fi
+
+          # 3. Stop container and verify graceful termination (Exit code 0 vs 137)
+          echo "Stopping container to verify SIGTERM handling..."
+          START_TIME=$(date +%s)
+          docker stop yamlchecker-monitor
+          END_TIME=$(date +%s)
+          
+          DURATION=$((END_TIME - START_TIME))
+          echo "Container stopped in $DURATION seconds."
+
+          EXIT_CODE=$(docker inspect -f '{{.State.ExitCode}}' yamlchecker-monitor)
+          echo "Container Exit Code: $EXIT_CODE"
+
+          if [ "$EXIT_CODE" -ne 0 ]; then
+            echo "Error: Container did not handle SIGTERM cleanly. Exit code is $EXIT_CODE (137 implies force-kill)."
+            exit 1
+          fi
+
+          # 4. Grep logs to confirm clean application shutdown signatures
+          echo "Verifying shutdown logs..."
+          docker logs yamlchecker-monitor 2>&1 | grep -i "server exited gracefully"
+
+      # --- FALLBACK DEBUGGING STEP ---
+      - name: Debug - Inspect Monitor Container Logs on Failure
+        if: failure()
+        run: |
+          echo "=== yamlchecker-monitor Container Logs ==="
+          docker logs yamlchecker-monitor || echo "Container logs unavailable."
+
+      # --- TRIVY VULNERABILITY SCAN ---
+      - name: Run Trivy Vulnerability Scanner
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: 'yamlchecker:ci'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'

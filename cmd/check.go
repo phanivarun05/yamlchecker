@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/phanivarun05/yamlchecker/checker"
@@ -119,7 +120,7 @@ func runCheck(cmd *cobra.Command, args []string) error {
 }
 
 func runMonitor(cmd *cobra.Command, args []string) error {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	cmd.SilenceUsage = true
 	configErrors := false
