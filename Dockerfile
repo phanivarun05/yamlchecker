@@ -24,4 +24,15 @@
     
     # 2. Updated to an absolute execution route to eliminate any working directory reliance
     ENTRYPOINT [ "/yamlchecker" ]
+
+    LABEL org.opencontainers.image.source=https://github.com/phanivarun05/yamlchecker
+    LABEL org.opencontainers.image.description="YAML Checker is a tool that checks the validity of YAML files."
+    LABEL org.opencontainers.image.licenses=MIT
+    LABEL org.opencontainers.image.authors="Phani Varun <phanivarun05@gmail.com>"
+    LABEL org.opencontainers.image.vendor="Phani Varun"
+    LABEL org.opencontainers.image.version=${VERSION}
+    LABEL org.opencontainers.image.revision=${COMMIT_SHA}
+    LABEL org.opencontainers.image.created=${BUILD_DATE}
+    LABEL org.opencontainers.image.url=https://github.com/phanivarun05/yamlchecker
+    LABEL org.opencontainers.image.documentation=https://github.com/phanivarun05/yamlchecker/blob/main/README.md
     

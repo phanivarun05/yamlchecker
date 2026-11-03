@@ -1,0 +1,62 @@
+name: docker-release
+run-name: docker ${{ github.ref_name }}
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  packages: write # needed to push to ghcr.io
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ghcr.io/phanivarun05/yamlchecker # must be all lowercase
+      TAG: ${{ github.ref_name }}
+
+    steps:
+      # 1. checkout
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. build
+      - name: Build Docker image
+        run: |
+          docker build --build-arg VERSION="$TAG" -t "$IMAGE:$TAG" -t "$IMAGE:latest" .
+
+      # 3. quick check (Bug 1 Fixed: Prints output and matches full string format)
+      - name: Quick check version
+        run: |
+          OUTPUT=$(docker run --rm "$IMAGE:$TAG" --version)
+          echo "Scanner tool output: $OUTPUT"
+          if [ "$OUTPUT" != "yamlchecker version $TAG" ]; then
+            echo "Version mismatch! Expected 'yamlchecker version $TAG', got '$OUTPUT'"
+            exit 1
+          fi
+
+      # 4. Trivy scan (Bug 2 Fixed: Updated version to v0.36.0 and dropped vuln-type)
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ env.TAG }}
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+
+      # 5. log in
+      - name: Log in to GitHub Container Registry
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+
+      # 6. push both tags
+      - name: Push Docker images
+        run: |
+          docker push "$IMAGE:$TAG"
+          docker push "$IMAGE:latest"
