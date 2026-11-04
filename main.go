@@ -4,6 +4,8 @@ import (
 	"log/slog"
 	"os"
 
+	_ "golang.org/x/mod/semver"
+
 	"github.com/phanivarun05/yamlchecker/cmd"
 )
 

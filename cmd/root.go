@@ -1,10 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
+	"time"
 
+	"github.com/phanivarun05/yamlchecker/internal/update"
 	"github.com/spf13/cobra"
 )
 
@@ -47,5 +51,57 @@ func setupLogging(cmd *cobra.Command, args []string) error {
 }
 
 func Execute() error {
-	return rootCmd.Execute()
+	version := resolveVersion()
+
+	var notice <-chan update.Release
+	if update.Eligible(version) {
+		notice = startUpdateCheck(version)
+	}
+
+	err := rootCmd.Execute()
+
+	if notice != nil {
+		select {
+		case rel, ok := <-notice:
+			if ok {
+				fmt.Fprintf(os.Stderr,
+					"\nA new version of yamlchecker is available: %s -> %s\n%s\n",
+					version, rel.Tag, rel.URL)
+			}
+		case <-time.After(time.Second):
+			// the check was too slow; skip it silently
+		}
+	}
+	return err
+}
+
+func startUpdateCheck(current string) <-chan update.Release {
+	ch := make(chan update.Release, 1)
+	go func() {
+		defer close(ch)
+
+		cacheFile, err := update.DefaultCacheFile()
+		if err != nil {
+			slog.Debug("update check skipped", "err", err)
+			return
+		}
+		checker := &update.Checker{
+			Client:    &http.Client{Timeout: 3 * time.Second},
+			URL:       update.LatestReleaseURL,
+			CacheFile: cacheFile,
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		rel, err := checker.Latest(ctx)
+		if err != nil {
+			slog.Debug("update check failed", "err", err)
+			return
+		}
+		if update.IsNewer(current, rel.Tag) {
+			ch <- rel
+		}
+	}()
+	return ch
 }
