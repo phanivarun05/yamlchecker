@@ -39,8 +39,50 @@ This repository is designed to evolve with release automation and tag-based publ
 
 ### Prerequisites
 
-- Go 1.20 or later
-- Git
+- Go 1.20 or later (needed to install or build from source)
+- Git (needed only to clone the repository)
+
+### Install with Go
+
+Install the latest tagged version as a command-line tool:
+
+```bash
+go install github.com/phanivarun05/yamlchecker@v0.1.2
+```
+
+The executable is installed to `$GOBIN` or, by default, `$GOPATH/bin`. Add that directory to your `PATH` if needed, then run:
+
+```bash
+yamlchecker --help
+```
+
+> With modern Go versions, `go get` adds or updates dependencies in a module; it does not install command-line executables. Use `go install module@version` to install yamlchecker as a CLI tool.
+
+### Download a prebuilt release
+
+1. Visit the [latest GitHub release](https://github.com/phanivarun05/yamlchecker/releases/latest).
+2. In **Assets**, download the archive for your operating system and CPU architecture. Linux and macOS binaries are `.tar.gz` files; Windows binaries are `.zip` files.
+3. Extract the archive and place the `yamlchecker` executable (or `yamlchecker.exe` on Windows) somewhere on your `PATH`.
+
+For example, to download and install the Linux x86-64 build:
+
+```bash
+curl -LO https://github.com/phanivarun05/yamlchecker/releases/download/v0.1.2/yamlchecker_0.1.2_linux_amd64.tar.gz
+tar -xzf yamlchecker_0.1.2_linux_amd64.tar.gz
+sudo install yamlchecker /usr/local/bin/yamlchecker
+```
+
+Choose the matching archive from the Releases page for other platforms. A `checksums.txt` file is also available on the release page for verifying downloads.
+
+### Download the source ZIP
+
+Open the [latest release page](https://github.com/phanivarun05/yamlchecker/releases/latest), expand **Assets**, and download **Source code (zip)**. Extract the ZIP, open a terminal in the project directory, and build the executable:
+
+```bash
+go build -o yamlchecker .
+```
+
+Alternatively, use **Code → Download ZIP** on the repository page to download a ZIP of the current default branch. This is not tied to a specific release.
 
 ### Clone and build
 
