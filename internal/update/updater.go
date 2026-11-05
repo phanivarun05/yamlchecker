@@ -17,6 +17,7 @@ import (
 const (
 	LatestReleaseURL = "https://api.github.com/repos/phanivarun05/yamlchecker/releases/latest"
 	cacheTTL         = 24 * time.Hour
+	failureTTL       = 1 * time.Hour
 )
 
 // Release is what the rest of the program needs to know about a version.
@@ -30,6 +31,7 @@ type cacheEntry struct {
 	CheckedAt time.Time `json:"checked_at"`
 	Tag       string    `json:"tag"`
 	URL       string    `json:"url"`
+	Failed    bool      `json:"failed,omitempty"`
 }
 
 // Checker holds everything that differs between production and tests.
@@ -88,7 +90,10 @@ func DefaultCacheFile() (string, error) {
 // Latest returns the newest release, using the cache when it is fresh.
 func (c *Checker) Latest(ctx context.Context) (Release, error) {
 	cached, haveCache := c.readCache()
-	if haveCache && time.Since(cached.CheckedAt) < cacheTTL {
+	if haveCache && cached.fresh() {
+		if cached.Tag == "" {
+			return Release{}, errors.New("response had no tag_name")
+		}
 		return Release{Tag: cached.Tag, URL: cached.URL}, nil
 	}
 
@@ -158,4 +163,27 @@ func (c *Checker) writeCache(entry cacheEntry) {
 		return
 	}
 	_ = os.WriteFile(c.CacheFile, data, 0o644)
+}
+
+// Cached returns the stored release without checking the network.
+func (c *Checker) Cached() (Release, bool) {
+	entry, ok := c.readCache()
+	if !ok || entry.Tag == "" {
+		return Release{}, false
+	}
+	return Release{Tag: entry.Tag, URL: entry.URL}, true
+}
+
+// Stale reports whether the cached release is older than cacheTTL.
+func (c *Checker) Stale() bool {
+	entry, ok := c.readCache()
+	return !ok || !entry.fresh()
+}
+
+func (e cacheEntry) fresh() bool {
+	ttl := cacheTTL
+	if e.Failed || e.Tag == "" {
+		ttl = failureTTL
+	}
+	return time.Since(e.CheckedAt) < ttl
 }

@@ -97,19 +97,19 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	for _, lf := range loaded {
 		result, err := lf.Data, lf.Err
 		if err != nil {
-			fmt.Println("ERROR:", err)
+			slog.Error("Error:", "err", err, "path", lf.Path)
 			configErrors = true
 			continue
 		}
 		missing := validator.CheckRequired(result, requiredFields)
 		if len(missing) > 0 {
-			slog.Warn("These are missing fields from YAML script: %s ---->", "path", lf.Path)
+			slog.Warn("These are missing fields from YAML script: ->", "path", lf.Path)
 			fmt.Println(missing)
 		} else {
 			if len(result) > 0 {
-				slog.Info("YAML Script parsed without errors:%s -> %v\n", "path", lf.Path, "result", result)
+				slog.Info("YAML Script parsed without errors: ->", "path", lf.Path, "result", result)
 			} else {
-				slog.Warn("YAML Script is empty:%s -> %v\n", "path", lf.Path, "result", result)
+				slog.Warn("YAML Script is empty: ->", "path", lf.Path, "result", result)
 			}
 		}
 	}

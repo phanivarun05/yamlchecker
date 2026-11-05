@@ -52,56 +52,71 @@ func setupLogging(cmd *cobra.Command, args []string) error {
 
 func Execute() error {
 	version := resolveVersion()
+	var updater *update.Checker
+	var refreshed <-chan struct{}
 
-	var notice <-chan update.Release
 	if update.Eligible(version) {
-		notice = startUpdateCheck(version)
+		updater = newUpdateChecker()
+	}
+
+	if updater != nil && updater.Stale() {
+		refreshed = refreshInBackground(updater)
 	}
 
 	err := rootCmd.Execute()
 
-	if notice != nil {
-		select {
-		case rel, ok := <-notice:
-			if ok {
-				fmt.Fprintf(os.Stderr,
-					"\nA new version of yamlchecker is available: %s -> %s\n%s\n",
-					version, rel.Tag, rel.URL)
-			}
-		case <-time.After(time.Second):
-			// the check was too slow; skip it silently
+	if updater != nil && refreshed != nil {
+		<-refreshed
+	}
+
+	if err != nil {
+		slog.Error("command failed:", "err", err)
+	}
+
+	// Print the update notice last with styling
+	if updater != nil {
+		if rel, ok := updater.Cached(); ok && update.IsNewer(version, rel.Tag) {
+			// Define ANSI color sequences
+			const (
+				colorYellow = "\033[33m"
+				styleBold   = "\033[1m"
+				colorReset  = "\033[0m"
+			)
+
+			// Wrap the notice text in Bold + Yellow, then clear it with colorReset
+			fmt.Fprintf(os.Stderr, "\n%s%sA new version of yamlchecker is available: %s -> %s\n%s%s\n",
+				styleBold, colorYellow, version, rel.Tag, rel.URL, colorReset)
 		}
 	}
-	return err
+
+	if err != nil {
+		os.Exit(1)
+	}
+
+	return nil
 }
 
-func startUpdateCheck(current string) <-chan update.Release {
-	ch := make(chan update.Release, 1)
+func newUpdateChecker() *update.Checker {
+	cacheFile, err := update.DefaultCacheFile()
+	if err != nil {
+		return nil
+	}
+	return &update.Checker{
+		Client:    &http.Client{Timeout: 2 * time.Second},
+		URL:       update.LatestReleaseURL,
+		CacheFile: cacheFile,
+	}
+}
+
+func refreshInBackground(c *update.Checker) <-chan struct{} {
+	done := make(chan struct{})
 	go func() {
-		defer close(ch)
-
-		cacheFile, err := update.DefaultCacheFile()
-		if err != nil {
-			slog.Debug("update check skipped", "err", err)
-			return
-		}
-		checker := &update.Checker{
-			Client:    &http.Client{Timeout: 3 * time.Second},
-			URL:       update.LatestReleaseURL,
-			CacheFile: cacheFile,
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer close(done)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-
-		rel, err := checker.Latest(ctx)
-		if err != nil {
+		if _, err := c.Latest(ctx); err != nil {
 			slog.Debug("update check failed", "err", err)
-			return
-		}
-		if update.IsNewer(current, rel.Tag) {
-			ch <- rel
 		}
 	}()
-	return ch
+	return done
 }
