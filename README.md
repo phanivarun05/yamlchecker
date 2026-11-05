@@ -99,6 +99,60 @@ go mod tidy
 go build ./...
 ```
 
+## Docker
+
+The published image is available from GitHub Container Registry (GHCR). The examples use the pinned `v0.1.2` release tag to make the image version explicit:
+
+```bash
+docker pull ghcr.io/phanivarun05/yamlchecker:v0.1.2
+```
+
+The `latest` tag is also published, but it moves to the newest release when a new version is published. Pin a version tag in scripts and deployments for predictable upgrades; use `latest` only if you intend to follow the newest release automatically.
+
+### Validate YAML files
+
+Mount the directory containing your YAML files at `/config` as read-only, then point the `check` command at that path. Replace `./config` with your local configuration directory:
+
+```bash
+docker run --rm \
+  -v "$(pwd)/config:/config:ro" \
+  ghcr.io/phanivarun05/yamlchecker:v0.1.2 \
+  check --dir /config --required type,name,url
+```
+
+### Monitor endpoints and expose metrics
+
+Start the monitor in the background, publish port `2112`, and mount your configuration directory read-only:
+
+```bash
+docker run -d --name yamlchecker-monitor \
+  -p 2112:2112 \
+  -v "$(pwd)/config:/config:ro" \
+  ghcr.io/phanivarun05/yamlchecker:v0.1.2 \
+  monitor --dir /config --workers 10 --interval 30s --metrics-addr 0.0.0.0:2112
+```
+
+The metrics endpoint is available at `http://localhost:2112/metrics`. Binding to `0.0.0.0` is necessary inside the container so the metrics server listens on the container's network interfaces and is reachable through Docker's published port.
+
+### Stop the monitor
+
+Stop the container with Docker's standard command:
+
+```bash
+docker stop yamlchecker-monitor
+```
+
+The application handles `SIGTERM`, so `docker stop` allows it to shut down cleanly.
+
+### Container permissions and metrics security
+
+- **Metrics have no authentication.** The `/metrics` endpoint is unauthenticated; expose it only to networks you trust and avoid making it publicly accessible.
+- **Mounted configurations must be readable by the container user.** The image runs as non-root UID `65532`. Ensure mounted files are readable and directories are traversable by this user; mounting a directory as read-only does not override host filesystem permissions.
+
+### Image security
+
+The image is built on a minimal distroless base and runs as a non-root user. CI fails on known, fixable HIGH or CRITICAL vulnerabilities in the Go code and dependencies (govulncheck) and in the image (Trivy). Findings with no available fix are not counted, and new vulnerabilities are published daily, so a scan result describes one moment in time.
+
 ## Usage
 
 Run the CLI with the help command:
