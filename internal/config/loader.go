@@ -17,7 +17,7 @@ func Load(path string) (map[string]interface{}, error) {
 	var result map[string]interface{}
 
 	if err := yaml.Unmarshal(bytes, &result); err != nil {
-		slog.Error("unmarshalling failed", "path", path)
+		slog.Error("Error: unmarshalling failed", "path", path)
 		return nil, err
 	}
 	return result, nil

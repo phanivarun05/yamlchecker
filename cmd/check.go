@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -91,23 +92,31 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Loading from Directory: %s\n", dirPath)
 	loaded, err := config.LoadAll(dirPath)
 	if err != nil {
-		slog.Error("Error Loading from Directory %s:", "path", dirPath)
+		slog.Error("Error Loading from Directory", "path", dirPath)
 		return err
 	}
 	for _, lf := range loaded {
 		result, err := lf.Data, lf.Err
 		if err != nil {
-			slog.Error("Error:", "err", err, "path", lf.Path)
+			slog.Error("Error: fault yaml structure", "err", err, "path", lf.Path)
 			configErrors = true
 			continue
 		}
 		missing := validator.CheckRequired(result, requiredFields)
 		if len(missing) > 0 {
 			slog.Warn("These are missing fields from YAML script: ->", "path", lf.Path)
-			fmt.Println(missing)
+			for _, m := range missing {
+				slog.Warn("missing field", "field", m)
+			}
 		} else {
 			if len(result) > 0 {
-				slog.Info("YAML Script parsed without errors: ->", "path", lf.Path, "result", result)
+				slog.Info("YAML Script parsed without errors: ->", "path", lf.Path)
+				// 1. Convert the map into clean, indented JSON bytes
+				prettyJSON, err := json.MarshalIndent(result, "", "  ")
+				if err == nil {
+					// 2. Print it directly to standard output so newlines are preserved
+					fmt.Println(string(prettyJSON))
+				}
 			} else {
 				slog.Warn("YAML Script is empty: ->", "path", lf.Path, "result", result)
 			}
@@ -136,7 +145,7 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 	}
 	loaded, err := config.LoadAll(dirPath)
 	if err != nil {
-		slog.Error("Error Loading from Directory %s:", "path", dirPath)
+		slog.Error("Error Loading from Directory", "path", dirPath)
 		return err
 	}
 	var targets []checker.Target
@@ -222,7 +231,7 @@ func runMonitor(cmd *cobra.Command, args []string) error {
 			runRound(ctx, targets, workers)
 			elapsed := time.Since(start)
 			if elapsed > interval {
-				slog.Warn("warning: round took %v, longer than --interval %v\n", "time_elapsed", elapsed, "interval", interval)
+				slog.Warn("warning: round took , longer than --interval", "time_elapsed", elapsed, "interval", interval)
 			}
 		}
 	}
@@ -248,8 +257,11 @@ func init() {
 	monitorCmd.Flags().DurationVarP(&interval, "interval", "i", 0*time.Minute, "Time interval to ping taregsts")
 	monitorCmd.Flags().StringVar(&addr, "metrics-addr", "", "Address for metrics server")
 	if err := checkCmd.MarkFlagRequired("dir"); err != nil {
-		fmt.Println("Error setting up required field", err)
+		slog.Error("Set the directory, can't check with blank dir", "err", err)
 		os.Exit(1)
+	}
+	if err := monitorCmd.MarkFlagRequired("dir"); err != nil {
+		slog.Error("Set the directory, can't monitor without it", "err", err)
 	}
 
 	rootCmd.AddCommand(checkCmd)
