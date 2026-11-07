@@ -70,7 +70,7 @@ func Execute() error {
 	}
 
 	if err != nil {
-		slog.Error("command failed:", "err", err)
+		slog.Error("command failed or exited with error", "err", err)
 	}
 
 	// Print the update notice last with styling
